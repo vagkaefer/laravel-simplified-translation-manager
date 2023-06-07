@@ -1,4 +1,4 @@
-# Laravel Easy Translate 
+# Laravel Simplified Translation Manager
 
 Laravel offers a robust solution for managing multiple languages. However, as the project scales, incorporating numerous languages and developers, managing translations can become intricate, leading to occasional lapses in translations variables across files.
 
