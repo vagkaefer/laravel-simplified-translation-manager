@@ -33,7 +33,6 @@ class Manager
     // List all Languages (excluding english "en")
     $languages = $this->getAllLanguagesFolders();
 
-    // Create backup
     if ($this->backup_original_files) {
       $this->createZipBackup($languages);
     }
@@ -87,6 +86,23 @@ class Manager
     return ksort($array);
   }
 
+  private function recursiveMergeTranslations($base, $new)
+  {
+    foreach ($base as $key => $value) {
+      if (!array_key_exists($key, $new)) {
+        if (is_array($value)) {
+          $new[$key] = $this->recursiveMergeTranslations($value, []);
+        } else {
+          $new[$key] = $this->prefix . $value . $this->suffix;
+        }
+      } elseif (is_array($value)) {
+        $new[$key] = $this->recursiveMergeTranslations($value, $new[$key]);
+      }
+    }
+
+    return $new;
+  }
+
   private function mergeLanguages($englishFiles, $language)
   {
 
@@ -105,17 +121,8 @@ class Manager
       }
 
       // Find keys in English translations that do not exist the newLanguagePath
-      $newTranslations = array_diff_key($englishTranslations, $newLanguageTranslations);
-
-      // Add the new key and TODO include prefix/suffix
-      foreach ($newTranslations as $index => $newTranslation) {
-
-        if (is_array($newTranslation)) {
-          $newLanguageTranslations = Arr::add($newLanguageTranslations, $index, $newTranslation);
-        } else {
-          $newLanguageTranslations = Arr::add($newLanguageTranslations, $index, $this->prefix . $newTranslation . $this->suffix);
-        }
-      }
+      // Merge translations recursively
+      $newLanguageTranslations = $this->recursiveMergeTranslations($englishTranslations, $newLanguageTranslations);
 
       // Check if the new file needs to be sorted alphabetically
       if ($this->alphabetize_output_files) {
@@ -205,7 +212,7 @@ class Manager
     $zip = new ZipArchive();
 
     // Create backups folder if not exists
-    Storage::disk('translations')->makeDirectory('backups', 0777);
+    Storage::disk('translations')->makeDirectory('backups', 777);
 
     // where the zip will be saved
     $destination = './lang/backups/' . time() . '-lang-backup.zip';
