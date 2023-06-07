@@ -14,6 +14,15 @@ TODO
 
 TODO
 
+# Do you like the package?
+
+You can help me with a coffee ;D
+
+<a href="https://www.buymeacoffee.com/vagkaefer" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" >
+</a>
+
+
 ## License
 
 As Laravel framewor, this packages is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
