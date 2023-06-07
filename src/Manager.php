@@ -2,254 +2,192 @@
 
 namespace VagKaefer\LaravelSimplifiedTranslationManager;
 
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Output\ConsoleOutput;
-use RuntimeException;
 use ZipArchive;
 
 class Manager
 {
+    protected $config;
 
-  protected $alphabetize_english;
-  protected $alphabetize_output_files;
-  protected $backup_original_files;
-  protected $prefix;
-  protected $suffix;
-
-  public function __construct()
-  {
-    $this->alphabetize_english = config('simplified-translation-manager.alphabetize_english');
-    $this->alphabetize_output_files = config('simplified-translation-manager.alphabetize_output_files');
-    $this->backup_original_files = config('simplified-translation-manager.backup_original_files');
-    $this->prefix = config('simplified-translation-manager.prefix');
-    $this->suffix = config('simplified-translation-manager.suffix');
-  }
-
-  public function process()
-  {
-
-    // List all Languages (excluding english "en")
-    $languages = $this->getAllLanguagesFolders();
-
-    if ($this->backup_original_files) {
-      $this->createZipBackup($languages);
+    public function __construct()
+    {
+        $this->config = collect([
+            'alphabetize_english' => config('simplified-translation-manager.alphabetize_english'),
+            'alphabetize_output_files' => config('simplified-translation-manager.alphabetize_output_files'),
+            'backup_original_files' => config('simplified-translation-manager.backup_original_files'),
+            'prefix' => config('simplified-translation-manager.prefix'),
+            'suffix' => config('simplified-translation-manager.suffix'),
+        ]);
     }
 
-    // TODO This need to be recursive and get files inside another folders
-    $englishFiles = $this->getEnglishFiles();
+    public function process()
+    {
+        $languages = $this->getAllLanguagesFolders();
 
-    if ($this->alphabetize_english) {
-      $this->alphabetize_english_files($englishFiles);
+        if ($this->config->get('backup_original_files')) {
+            (new ManagerBackup())->createZipBackup($languages);
+        }
+
+        $englishFiles = $this->getEnglishFiles();
+
+        if ($this->config->get('alphabetize_english')) {
+            $this->alphabetizeEnglishFiles($englishFiles);
+        }
+
+        foreach ($languages as $language) {
+            $this->mergeLanguages($englishFiles, $language);
+        }
     }
 
-    // Process every language
-    foreach ($languages as $language) {
-      $this->mergeLanguages($englishFiles, $language);
-    }
-  }
+    private function alphabetizeEnglishFiles(array $englishFiles): void
+    {
+        echo "Sorting alphabetically english files:\n";
 
-  private function alphabetize_english_files($englishFiles)
-  {
-
-    echo "Sorting alphabetically english files:\n";
-
-    foreach ($englishFiles as $englishPath) {
-
-      $englishTranslations = include "lang/" . $englishPath;
-
-      $this->sortIndexes($englishTranslations);
-
-      // Change array() to [] 
-      // Replace var_export with the custom function
-      $exportTranslations = $this->convertArraySyntax($englishTranslations);
-
-      // Save file
-      if (File::put("lang/" . $englishPath, "<?php\n\nreturn $exportTranslations;\n")) {
-        echo "\tFile lang/" . $englishPath . " sorted alphabetically\n";
-      } else {
-        $this->returnConsoleError("\tError during sorting alphabetically lang/" . $englishPath . "! Process stoped!");
-      }
-    }
-  }
-
-  private function sortIndexes(&$array)
-  {
-
-    foreach ($array as &$value) {
-      if (is_array($value)) {
-        $this->sortIndexes($value);
-      }
+        foreach ($englishFiles as $englishPath) {
+            $this->sortEnglishFile($englishPath);
+        }
     }
 
-    return ksort($array);
-  }
+    private function sortEnglishFile(string $englishPath): void
+    {
+        $englishTranslations = include Storage::disk('translations')->path('')."/{$englishPath}";
 
-  private function recursiveMergeTranslations($base, $new)
-  {
-    foreach ($base as $key => $value) {
-      if (!array_key_exists($key, $new)) {
-        if (is_array($value)) {
-          $new[$key] = $this->recursiveMergeTranslations($value, []);
+        $this->sortIndexesRecursively($englishTranslations);
+
+        $exportTranslations = $this->convertArraySyntax($englishTranslations);
+
+        if (File::put(Storage::disk('translations')->path('')."/{$englishPath}", "<?php\n\nreturn {$exportTranslations};\n")) {
+            echo "\tFile lang/{$englishPath} sorted alphabetically\n";
         } else {
-          $new[$key] = $this->prefix . $value . $this->suffix;
+            $this->haltWithError("\tError during sorting alphabetically lang/{$englishPath}! Process stopped!");
         }
-      } elseif (is_array($value)) {
-        $new[$key] = $this->recursiveMergeTranslations($value, $new[$key]);
-      }
     }
 
-    return $new;
-  }
+    private function sortIndexesRecursively(array &$array): bool
+    {
+        array_walk($array, fn (&$value) => is_array($value) && $this->sortIndexesRecursively($value));
 
-  private function mergeLanguages($englishFiles, $language)
-  {
-
-    echo "Mergin language '" . $language . "'\n";
-
-    foreach ($englishFiles as $englishPath) {
-
-      $englishTranslations = include "lang/" . $englishPath;
-
-      $newLanguagePath = str_replace("en/", $language . "/", $englishPath);
-
-      if (Storage::disk('translations')->exists($newLanguagePath)) {
-        $newLanguageTranslations = include "lang/" . $newLanguagePath;
-      } else {
-        $newLanguageTranslations = [];
-      }
-
-      // Find keys in English translations that do not exist the newLanguagePath
-      // Merge translations recursively
-      $newLanguageTranslations = $this->recursiveMergeTranslations($englishTranslations, $newLanguageTranslations);
-
-      // Check if the new file needs to be sorted alphabetically
-      if ($this->alphabetize_output_files) {
-        // Sort indexes alphabetically
-        $this->sortIndexes($newLanguageTranslations);
-      }
-
-      // Change array() to [] 
-      // Replace var_export with the custom function
-      $exportTranslations = $this->convertArraySyntax($newLanguageTranslations);
-
-      // Save file
-      if (File::put("lang/" . $newLanguagePath, "<?php\n\nreturn $exportTranslations;\n")) {
-        echo "\tFile lang/" . $englishPath . " merged with lang/" . $newLanguagePath . "\n";
-      } else {
-        $this->returnConsoleError("\tError merging lang/" . $newLanguagePath . "! Process stoped!");
-      }
+        return ksort($array);
     }
 
-    // dump($englishFiles);
-    // dump($language);
-  }
+    private function mergeLanguages(array $englishFiles, string $language): void
+    {
+        echo "Merging with language '{$language}'\n";
 
-  private function getEnglishFiles()
-  {
-    // List all files in the 'en' directory of the 'translations' disk
-    $files = Storage::disk('translations')->allFiles('en');
-
-    // Check if any English files were found
-    if (empty($files)) {
-
-      // If not, output an error message and stop the process
-      $this->returnConsoleError("There is not English files to manage, stopping process!");
-    }
-
-    // Return the files if found
-    return $files;
-  }
-
-  private function getAllLanguagesFolders()
-  {
-    // List all directories in the root of the 'translations' disk
-    $directories = Storage::disk('translations')->allDirectories();
-
-    // Remove 'en' and 'backps' from the directories
-    $directories = array_values(array_diff($directories, ['en', 'backups']));
-
-    // Check if there are any other languages to translate
-    if (empty($directories)) {
-
-      // If not, output an error message and stop the process
-      $this->returnConsoleError("There is not another languages to translate, stopping process!");
-    }
-
-    // Return the directories if found
-    return $directories;
-  }
-
-  private function returnConsoleError($message)
-  {
-    $consoleOutput = new ConsoleOutput();
-    $consoleOutput->writeln("<error>" . $message . "</error>");
-    exit(0);
-  }
-
-
-  // Recursive function to convert array() syntax to []
-  private function convertArraySyntax($input)
-  {
-    if (is_array($input)) {
-      $output = [];
-      foreach ($input as $key => $value) {
-        $output[$key] = $this->convertArraySyntax($value);
-      }
-      return '[' . PHP_EOL . collect($output)->map(function ($value, $key) {
-        return "    '{$key}' => {$value},";
-      })->implode(PHP_EOL) . PHP_EOL . ']';
-    } else {
-      return var_export($input, true);
-    }
-  }
-
-  private function createZipBackup($languages)
-  {
-
-    // Create new Zip Archive.
-    $zip = new ZipArchive();
-
-    // Create backups folder if not exists
-    Storage::disk('translations')->makeDirectory('backups', 777);
-
-    // where the zip will be saved
-    $destination = './lang/backups/' . time() . '-lang-backup.zip';
-
-    // The mode to open the archive.
-    $open = $zip->open($destination, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-
-    // Check if open was successful.
-    if ($open !== true) {
-      $this->returnConsoleError("Could not open archive file: $destination");
-    }
-
-    $languages[] = 'en';
-
-    foreach ($languages as $language) {
-
-      $source = 'lang/' . $language;
-      // Get files in the source directory.
-      $files = new \RecursiveIteratorIterator(
-        new \RecursiveDirectoryIterator($source, \RecursiveDirectoryIterator::SKIP_DOTS),
-        \RecursiveIteratorIterator::SELF_FIRST
-      );
-
-      foreach ($files as $file) {
-
-        // Get real path for current file
-        $filePath = $file->getRealPath();
-
-        if (is_dir($filePath)) {
-          $zip->addEmptyDir($filePath);
-        } elseif (is_file($filePath)) {
-          $zip->addFromString($filePath, file_get_contents($filePath));
+        foreach ($englishFiles as $englishPath) {
+            $this->mergeLanguageFile($englishPath, $language);
         }
-      }
     }
 
-    // Close the active archive.
-    $zip->close();
-  }
+    private function mergeLanguageFile(string $englishPath, string $language): void
+    {
+        $englishTranslations = include Storage::disk('translations')->path('')."/{$englishPath}";
+
+        $newLanguagePath = str_replace('en/', "{$language}/", $englishPath);
+        $newLanguageTranslations = $this->getLanguageTranslations($newLanguagePath);
+
+        $newLanguageTranslations = $this->mergeTranslationsRecursively($englishTranslations, $newLanguageTranslations);
+
+        if ($this->config->get('alphabetize_output_files')) {
+            $this->sortIndexesRecursively($newLanguageTranslations);
+        }
+
+        $exportTranslations = $this->convertArraySyntax($newLanguageTranslations);
+
+        if (File::put(Storage::disk('translations')->path('')."/{$newLanguagePath}", "<?php\n\nreturn {$exportTranslations};\n")) {
+            echo "\tFile lang/{$englishPath} merged with lang/{$newLanguagePath}\n";
+        } else {
+            $this->haltWithError("\tError merging lang/{$newLanguagePath}! Process stopped!");
+        }
+    }
+
+    private function mergeTranslationsRecursively(array $base, array $new): array
+    {
+        foreach ($base as $key => $value) {
+            $new[$key] = $this->mergeTranslationValue($key, $value, $new);
+        }
+
+        return $new;
+    }
+
+    private function mergeTranslationValue(string $key, $baseValue, array $new): mixed
+    {
+        if (!array_key_exists($key, $new)) {
+            return is_array($baseValue)
+                ? $this->mergeTranslationsRecursively($baseValue, [])
+                : $this->config->get('prefix') . $baseValue . $this->config->get('suffix');
+        }
+
+        return is_array($baseValue)
+            ? $this->mergeTranslationsRecursively($baseValue, $new[$key])
+            : $new[$key];
+    }
+
+    private function getLanguageTranslations(string $newLanguagePath): array
+    {
+        return Storage::disk('translations')->exists($newLanguagePath)
+            ? include Storage::disk('translations')->path('')."/{$newLanguagePath}"
+            : [];
+    }
+
+    private function getEnglishFiles(): array
+    {
+        $files = Storage::disk('translations')->allFiles('en');
+
+        if (empty($files)) {
+            $this->haltWithError("There are no English files to manage, stopping process!");
+        }
+
+        return $files;
+    }
+
+    private function getAllLanguagesFolders(): array
+    {
+        $directories = Storage::disk('translations')->allDirectories();
+
+        $directories = array_values(array_diff($directories, ['en', 'backups']));
+
+        if (empty($directories)) {
+            $this->haltWithError("There are no other languages to translate, stopping process!");
+        }
+
+        return $directories;
+    }
+
+    private function haltWithError(string $message): void
+    {
+        (new ConsoleOutput())->writeln("<error>{$message}</error>");
+
+        exit(0);
+    }
+
+    private function convertArraySyntax(array $input, int $depth = 0): string
+    {
+        $output = array_map(
+            fn ($key, $value) => $this->formatArrayItem($key, $value, $depth),
+            array_keys($input),
+            $input
+        );
+
+        return $this->wrapArrayOutput($output, $depth);
+    }
+
+    private function formatArrayItem(string $key, $value, int $depth): string
+    {
+        return sprintf(
+            "%s'%s' => %s",
+            str_repeat('    ', $depth + 1),
+            $key,
+            is_array($value) ? $this->convertArraySyntax($value, $depth + 1) : var_export($value, true)
+        );
+    }
+
+    private function wrapArrayOutput(array $output, int $depth): string
+    {
+        $indentation = str_repeat('    ', $depth);
+
+        return sprintf("[%s%s%s%s]", PHP_EOL, implode(',' . PHP_EOL, $output), PHP_EOL, $indentation);
+    }
 }

@@ -4,7 +4,7 @@ return [
 
   'prefix' => env('SIM_TRANS_MANAGER_PREFIX', ''),
 
-  'suffix' => env('SIM_TRANS_MANAGER_SUFFIX', ' - NEED TRANSLATION'),
+  'suffix' => env('SIM_TRANS_MANAGER_SUFFIX', ' - NT'),
 
   'alphabetize_english' => env('SIM_TRANS_MANAGER_ALPHABETIZE_ENGLISH', true),
 

@@ -13,7 +13,6 @@ class ProcessCommand extends Command
 
   public function handle()
   {
-    // TODO - Create Facade?
     $manager = new Manager();
     $manager->process();
   }
