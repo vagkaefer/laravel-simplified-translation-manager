@@ -6,7 +6,8 @@
   "authors": [
     {
       "name": "Vagner Kaefer",
-      "email": "vagner@kaefer.eng.br"
+      "email": "vagner@kaefer.eng.br",
+      "homepage": "https://github.com/vagkaefer"
     }
   ],
   "autoload": {
