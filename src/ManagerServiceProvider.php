@@ -28,7 +28,7 @@ class ManagerServiceProvider extends ServiceProvider
 
             Config::set('filesystems.disks.translations', [
                 'driver' => 'local',
-                'root' => base_path() . '/lang/'
+                'root' => base_path() . '/resources/lang/'
             ]);
         }
     }
