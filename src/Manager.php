@@ -39,6 +39,7 @@ class Manager
         foreach ($languages as $language) {
             $this->mergeLanguages($englishFiles, $language);
         }
+
     }
 
     private function alphabetizeEnglishFiles(array $englishFiles): void

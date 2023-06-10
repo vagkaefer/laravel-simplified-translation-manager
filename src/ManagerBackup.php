@@ -23,18 +23,42 @@ class ManagerBackup
 
     $this->addToZipArchive($zip, $languages);
 
+    $zipFilename = $zip->filename;
+    
     $zip->close();
 
-    // TODO Validate if the zip is created and not empty
-    echo "backup generated in " . $this->getDestinationPath() . "\n";
+    $checkBackup = $this->checkBackupIsCreated($zipFilename);
+
+    if($checkBackup){
+      echo "backup generated in " . $this->getDestinationPath() . "\n";
+    }else{
+      $this->haltWithError("fail to generate backup - stoping process!");
+    }
+    
+  }
+
+  protected function checkBackupIsCreated($zipFilename): bool
+  {
+
+    $exists = File::exists($zipFilename);
+    $fileSize = File::size($zipFilename);
+
+    return ($exists && $fileSize > 100);
+
+  }
+
+  protected function checkBackupDirectoryExists(): bool
+  {
+    return File::exists(Storage::disk('translations')->path('') . 'backups');
   }
 
   protected function ensureBackupsDirectoryExists(): void
   {
-
-    if (!File::exists(Storage::disk('translations')->path('') . '/backups')) {
+    if (!$this->checkBackupDirectoryExists()) {
       Storage::disk('translations')->makeDirectory('backups');
-      chmod(Storage::disk('translations')->path('') . '/backups', 0777);
+      if (!$this->checkBackupDirectoryExists()) {
+        $this->haltWithError("Error creating backup directory! - " . Storage::disk('translations')->path('') . "backups\n");
+      }
     }
   }
 
@@ -48,7 +72,7 @@ class ManagerBackup
 
   protected function getDestinationPath(): string
   {
-    return Storage::disk('translations')->path('') . '/backups/' . time() . '-lang-backup.zip';
+    return Storage::disk('translations')->path('') . 'backups/' . time() . '-lang-backup.zip';
   }
 
   protected function addToZipArchive(ZipArchive $zip, array $languages): void
@@ -84,4 +108,12 @@ class ManagerBackup
       $zip->addFromString($filePath, file_get_contents($filePath));
     }
   }
+
+  private function haltWithError(string $message): void
+    {
+        (new ConsoleOutput())->writeln("<error>{$message}</error>");
+
+        exit(0);
+    }
+
 }

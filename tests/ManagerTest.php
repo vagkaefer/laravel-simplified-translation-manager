@@ -89,19 +89,27 @@ class ManagerTest extends TestCase
         $this->assertTrue($authEnNew);
         $this->assertFalse($authPtBRNew);
 
+        $this->run_process();
+
+    }
+
+    public function run_process()
+    {
+
         // Run process
         $manager = new Manager();
-        $manager->process();
+        $check = $manager->process();
+        
+    }
 
-        Artisan::call('view:clear');
-        Artisan::call('cache:clear');
+    /** @test */
+    public function test_ptbr_translated()
+    {
 
         // Locale Portuguese
         $this->app->setLocale('pt_BR');
         $authPtBRSignIn = __('auth.signin');
         $authPtBRNew = __('auth.new');
-
-        dump($authPtBRNew);
 
         //Checks
         $authPtBRCheck = ($authPtBRSignIn ==  'Acessar o sistema'); //not changed - OK
