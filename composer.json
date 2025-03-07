@@ -2,7 +2,7 @@
   "name": "vagkaefer/laravel-simplified-translation-manager",
   "description": "A laravel package to manage Laravel translations",
   "type": "library",
-  "version": "11.0",
+  "version": "12.0",
   "license": "MIT",
   "authors": [
     {
@@ -30,7 +30,7 @@
   },
   "require": {
     "php": "^8.0",
-    "laravel/framework": "^11.0",
+    "laravel/framework": "^12.0",
     "ext-zip": "*"
   },
   "require-dev": {
